@@ -1,19 +1,11 @@
-// src/App.tsx
 import React, { useEffect, useMemo, useState, useCallback } from "react";
 import ConnectButton from "./components/ConnectButton";
 import { useSeiMoodContract } from "./contract";
+import { useVoiceRecognition } from "./hooks/useVoiceRecognition";
+import { useMoodSounds } from "./hooks/useMoodSounds";
 import "./index.css";
 
 const EMOJIS = ["❤️", "😎", "😭", "😡"];
-
-const sounds: Record<string, HTMLAudioElement> = {
-  "❤️": new Audio("/sounds/heart.mp3"),
-  "😎": new Audio("/sounds/cool.mp3"),
-  "😭": new Audio("/sounds/cry.mp3"),
-  "😡": new Audio("/sounds/angry.mp3"),
-};
-
-console.log("sounds", sounds);
 
 type FeedItem = { user: string; block: number; emoji: string };
 
@@ -36,102 +28,57 @@ export default function App() {
   const [bursts, setBursts] = useState<
     { id: number; x: number; y: number; emoji: string }[]
   >([]);
-  const [listening, setListening] = useState(false);
-  const SpeechRecognition =
-    (window as any).webkitSpeechRecognition ||
-    (window as any).SpeechRecognition;
-  const recognition = SpeechRecognition ? new SpeechRecognition() : null;
 
-  if (recognition) {
-    recognition.lang = "en-US";
-    recognition.continuous = false;
-    recognition.interimResults = false;
+  /** ✅ Hook: sounds */
+  const { playSound } = useMoodSounds();
 
-    recognition.onresult = async (event: any) => {
-      const transcript = event.results[0][0].transcript.toLowerCase();
-      console.log("Voice:", transcript);
+  /** ✅ Hook: voice */
+  const handleVoiceEmoji = async (emoji: string) => {
+    setSelectedEmoji(emoji);
+    await new Promise((r) => setTimeout(r, 100));
+    handleSetMood(emoji);
+  };
 
-      let emoji = null;
+  const { listening, startListening, stopListening } =
+    useVoiceRecognition(handleVoiceEmoji);
 
-      if (transcript.includes("love") || transcript.includes("happy")) {
-        emoji = "❤️";
-      } else if (
-        transcript.includes("cool") ||
-        transcript.includes("relaxed")
-      ) {
-        emoji = "😎";
-      } else if (transcript.includes("sad") || transcript.includes("cry")) {
-        emoji = "😭";
-      } else if (transcript.includes("angry") || transcript.includes("mad")) {
-        emoji = "😡";
-      }
-
-      if (emoji) {
-        setSelectedEmoji(emoji);
-
-        // wait for React state to apply (important)
-        await new Promise((res) => setTimeout(res, 100));
-
-        handleSetMood(emoji); // 🚀 auto submit after voice
-      } else {
-        alert(`Didn't understand: ${transcript}`);
-      }
-    };
-
-    recognition.onend = () => setListening(false);
-  }
-
-  // Refresh reads: uses contract.getGlobalHistory() and builds UI state
+  // Refresh reads
   const refreshData = useCallback(async () => {
     if (!contract || !provider) return;
     try {
       const blockNum = await provider.getBlockNumber();
       setCurrentBlock(blockNum);
 
-      // Read the on-chain global history
-      // NOTE: getGlobalHistory() returns an array of structs: { user, blockNumber, emoji }
-      // If it becomes large, we only process the most recent N entries client-side
       const global: any[] = await contract.getGlobalHistory();
-
-      // Safety: pick only last N entries to keep UI fast (N adjustable)
-      const N = 500; // feel free to increase on testnet
+      const N = 500;
       const recentGlobal = global.length > N ? global.slice(-N) : global;
 
-      // Convert and sort by block descending
       const mapped = recentGlobal
         .map((r: any) => ({
           user: String(r.user),
           block: Number(r.blockNumber),
           emoji: String(r.emoji),
         }))
-        .sort((a: any, b: any) => b.block - a.block);
+        .sort((a, b) => b.block - a.block);
 
-      // Live feed (most recent)
       setLiveFeed(mapped.slice(0, 50));
 
-      // Build latest mood per block (first seen in mapped per block)
       const blockMap = new Map<number, string>();
       for (const rec of mapped) {
-        if (!blockMap.has(rec.block)) {
-          blockMap.set(rec.block, rec.emoji);
-        }
+        if (!blockMap.has(rec.block)) blockMap.set(rec.block, rec.emoji);
       }
 
       const blockList = Array.from(blockMap.entries()).sort(
         (a, b) => b[0] - a[0]
       );
 
-      // Recent blocks (6)
       setRecentBlocks(
         blockList.slice(0, 6).map(([b, m]) => ({ block: b, mood: m }))
       );
-
-      // Heatmap (last 20)
       setHeatmap(
         blockList.slice(0, 20).map(([b, m]) => ({ block: b, mood: m }))
       );
 
-      // Leaderboard counts (from mapped subset)
       const counts: Record<string, number> = {
         "❤️": 0,
         "😎": 0,
@@ -142,39 +89,31 @@ export default function App() {
         if (counts[rec.emoji] !== undefined) counts[rec.emoji]++;
       }
       setEmojiCounts(counts);
-
-      // Block mood (most recent block)
       setBlockMood(blockMap.get(blockNum) ?? "—");
 
-      // My user history
       if (address) {
         try {
           const userHistory: any[] = await contract.getUserHistory(address);
           const recentUser =
             userHistory.length > 20 ? userHistory.slice(-20) : userHistory;
           setMyHistory(recentUser.map((h) => String(h.emoji)).reverse());
-        } catch (err) {
-          console.warn("getUserHistory failed", err);
-        }
+        } catch {}
       }
     } catch (err) {
       console.warn("refreshData error", err);
     }
   }, [contract, provider, address]);
 
-  // Initial load and polling
   useEffect(() => {
     if (!contract || !provider) return;
 
     refreshData();
     const poll = setInterval(refreshData, 30_000);
 
-    // Subscribe to MoodSet events using the read contract
     const handler = (user: string, blockNumber: any, emoji: string) => {
       const item: FeedItem = { user, block: Number(blockNumber), emoji };
       setLiveFeed((s) => [item, ...s].slice(0, 100));
 
-      // Update recent blocks + heatmap minimally
       setRecentBlocks((prev) =>
         [{ block: item.block, mood: item.emoji }, ...prev].slice(0, 6)
       );
@@ -182,28 +121,21 @@ export default function App() {
         [{ block: item.block, mood: item.emoji }, ...prev].slice(0, 20)
       );
 
-      // Update counts (cheap local increment)
       setEmojiCounts((prev) => {
-        const next = { ...prev };
-        if (next[item.emoji] === undefined) next[item.emoji] = 0;
-        next[item.emoji] = next[item.emoji] + 1;
-        return next;
+        const n = { ...prev };
+        n[item.emoji] = (n[item.emoji] ?? 0) + 1;
+        return n;
       });
 
-      // Update blockMood if it matches current block
       setCurrentBlock((cb) => {
-        if (cb === item.block) {
-          setBlockMood(item.emoji);
-        }
+        if (cb === item.block) setBlockMood(item.emoji);
         return cb;
       });
     };
 
     try {
       contract.on("MoodSet", handler);
-    } catch (e) {
-      console.warn("contract.on failed", e);
-    }
+    } catch {}
 
     return () => {
       clearInterval(poll);
@@ -220,25 +152,19 @@ export default function App() {
     setLoading(true);
     try {
       await setMood(emoji);
-      // feedback effect
-      try {
-        const s = sounds[emoji];
-        if (s) {
-          s.currentTime = 0;
-          s.play().catch(() => {});
-        }
-      } catch {}
 
-      // center burst (big emoji)
+      /** ✅ Play sound via hook */
+      playSound(emoji);
+
+      /** ✅ Visual effects */
       setEffectEmoji(emoji);
       setTimeout(() => setEffectEmoji(null), 900);
 
-      // create burst particles
       const particles = Array.from({ length: 12 }).map((_, i) => ({
         id: Date.now() + i,
         x: window.innerWidth / 2,
         y: window.innerHeight - 200,
-        emoji: emoji,
+        emoji,
       }));
 
       setBursts((b) => [...b, ...particles]);
@@ -246,17 +172,14 @@ export default function App() {
         setBursts((prev) => prev.filter((p) => !particles.includes(p)));
       }, 900);
 
-      // Refresh local data after tx confirmed
       await refreshData();
-    } catch (err) {
-      console.error("setMood error", err);
-      alert("Failed to set mood: " + (err as any)?.message || String(err));
+    } catch (err: any) {
+      alert("Failed to set mood: " + err?.message || String(err));
     } finally {
       setLoading(false);
     }
   }
 
-  // Compute leaderboard sorted
   const leaderboard = useMemo(() => {
     return EMOJIS.map((e) => ({ emoji: e, count: emojiCounts[e] ?? 0 })).sort(
       (a, b) => b.count - a.count
@@ -311,28 +234,23 @@ export default function App() {
               >
                 {loading ? "Submitting…" : "Set Mood"}
               </button>
+
+              {/* ✅ Voice button via hook */}
               <button
                 onClick={() => {
-                  if (!recognition)
-                    return alert("Speech recognition not supported");
-                  if (!listening) {
-                    setListening(true);
-                    recognition.start();
-                  } else {
-                    setListening(false);
-                    recognition.stop();
-                  }
+                  listening ? stopListening() : startListening();
                 }}
                 className={`w-full mb-4 py-3 rounded-xl text-lg cursor-pointer 
-    ${
-      listening
-        ? "bg-purple-700 hover:bg-purple-600"
-        : "bg-purple-500 hover:bg-purple-700"
-    }`}
+                  ${
+                    listening
+                      ? "bg-purple-700 hover:bg-purple-600"
+                      : "bg-purple-500 hover:bg-purple-700"
+                  }`}
               >
                 🎤 {listening ? "Listening…" : "Voice Input"}
               </button>
             </div>
+
 
             {/* Stats */}
             <div className="flex gap-4 mb-4">
