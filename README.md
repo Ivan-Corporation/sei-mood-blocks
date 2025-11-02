@@ -70,6 +70,16 @@ forge script script/Deploy.s.sol --rpc-url $SEI_TESTNET_RPC --private-key $PRIVA
 
 > Take the deployed address and put it in frontend `.env`
 
+### Failed to decode fix for WSL
+
+```
+sudo apt update
+sudo apt install dos2unix
+
+PRIVATE_KEY=$(echo $PRIVATE_KEY | tr -d '\r\n')
+dos2unix .env
+```
+
 ---
 
 ## 🌐 Frontend Setup (React + pnpm)
@@ -102,15 +112,15 @@ pnpm build
 
 ## 📦 Frontend Dependencies
 
-| Purpose | Package |
-|--------|--------|
-Wallet Connect | `@reown/appkit`
-Ethers | `ethers@6`
-React | `react@19`
-Styling | TailwindCSS
-Bundler | Vite
-UI voice input | Web Speech API
-Pkg manager | pnpm
+| Purpose        | Package         |
+| -------------- | --------------- |
+| Wallet Connect | `@reown/appkit` |
+| Ethers         | `ethers@6`      |
+| React          | `react@19`      |
+| Styling        | TailwindCSS     |
+| Bundler        | Vite            |
+| UI voice input | Web Speech API  |
+| Pkg manager    | pnpm            |
 
 Your `package.json`:
 
@@ -153,12 +163,12 @@ Your `package.json`:
 
 ## 🎤 Voice Commands → Emoji Mapping
 
-| Say | Emoji |
-|-----|------|
-love / happy | ❤️
-cool / relaxed | 😎
-sad / cry | 😭
-angry / mad | 😡
+| Say            | Emoji |
+| -------------- | ----- |
+| love / happy   | ❤️    |
+| cool / relaxed | 😎    |
+| sad / cry      | 😭    |
+| angry / mad    | 😡    |
 
 ---
 
