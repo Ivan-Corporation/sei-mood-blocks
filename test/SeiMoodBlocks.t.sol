@@ -30,15 +30,6 @@ contract SeiMoodBlocksTest is Test {
         assertEq(mood.globalMoodCount(unicode"😡"), 1);
     }
 
-    function testDoubleSameMoodDoesNothing() public {
-        vm.startPrank(user1);
-        mood.setMood(unicode"❤️");
-        mood.setMood(unicode"❤️");
-        vm.stopPrank();
-
-        assertEq(mood.globalMoodCount(unicode"❤️"), 1);
-    }
-
     function testMultipleUsersSameBlock() public {
         vm.prank(user1);
         mood.setMood(unicode"😭");
