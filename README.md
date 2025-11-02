@@ -64,9 +64,8 @@ RPC_URL=https://evm-rpc-testnet.sei-apis.com
 ### Deploy
 
 ```bash
-forge create src/SeiMoodBlocks.sol:SeiMoodBlocks \
-  --rpc-url $RPC_URL \
-  --private-key $PRIVATE_KEY
+forge script script/Deploy.s.sol --rpc-url $SEI_TESTNET_RPC --private-key $PRIVATE_KEY --chain-id 1328 --broadcast
+
 ```
 
 > Take the deployed address and put it in frontend `.env`
