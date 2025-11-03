@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 
 export type VoiceEmojiMap = Record<string, string>;
 
@@ -18,45 +18,60 @@ export function useVoiceRecognition(
   emojiMap: VoiceEmojiMap = DEFAULT_MAP
 ) {
   const [listening, setListening] = useState(false);
-  const Speech =
-    (window as any).webkitSpeechRecognition ||
-    (window as any).SpeechRecognition;
-
-  const recognition = Speech ? new Speech() : null;
-
-  const startListening = useCallback(() => {
-    if (!recognition) return alert("Speech recognition not supported");
-    setListening(true);
-    recognition.start();
-  }, [recognition]);
-
-  const stopListening = useCallback(() => {
-    if (recognition) recognition.stop();
-  }, [recognition]);
+  const recognitionRef = useRef<any>(null);
+  const restartingRef = useRef(false);
 
   useEffect(() => {
-    if (!recognition) return;
+    const Speech =
+      (window as any).webkitSpeechRecognition ||
+      (window as any).SpeechRecognition;
 
-    recognition.lang = "en-US";
-    recognition.continuous = false;
-    recognition.interimResults = false;
+    if (!Speech) return;
+
+    if (!recognitionRef.current) {
+      const rec = new Speech();
+      rec.lang = "en-US";
+      rec.continuous = true;          // ✅ true continuous mode
+      rec.interimResults = false;
+      recognitionRef.current = rec;
+    }
+
+    const recognition = recognitionRef.current;
 
     recognition.onresult = (event: any) => {
-      const transcript = event.results[0][0].transcript.toLowerCase();
+      const transcript = event.results[event.resultIndex][0].transcript.toLowerCase();
+
       const emoji =
         Object.entries(emojiMap).find(([word]) =>
           transcript.includes(word)
         )?.[1] ?? null;
 
-      emoji ? onEmojiDetected(emoji) : alert(`Didn't understand: ${transcript}`);
+      if (emoji) onEmojiDetected(emoji);
     };
 
-    recognition.onend = () => setListening(false);
-  }, [recognition, emojiMap, onEmojiDetected]);
+    recognition.onstart = () => setListening(true);
 
-  return {
-    listening,
-    startListening,
-    stopListening,
-  };
+    recognition.onend = () => {
+      setListening(false);
+
+      // ✅ prevent "already started" spam + auto restart
+      if (!restartingRef.current) {
+        restartingRef.current = true;
+        setTimeout(() => {
+          try { recognition.start(); } catch {}
+          restartingRef.current = false;
+        }, 200); // <-- sweet spot delay
+      }
+    };
+
+    // ✅ initial start
+    try { recognition.start(); } catch {}
+
+    return () => {
+      try { recognition.stop(); } catch {}
+    };
+
+  }, [emojiMap, onEmojiDetected]);
+
+  return { listening };
 }
