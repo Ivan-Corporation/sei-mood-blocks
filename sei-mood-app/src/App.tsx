@@ -7,6 +7,8 @@ const EMOJIS = ["❤️", "😎", "😭", "😡"];
 
 type FeedItem = { user: string; block: number; emoji: string };
 
+console.log('window', window)
+
 export default function App() {
   const [selectedEmoji, setSelectedEmoji] = useState(EMOJIS[0]);
   const [currentBlock, setCurrentBlock] = useState(100000);
@@ -106,6 +108,11 @@ export default function App() {
           <h1 className="text-3xl font-bold text-center">
             SeiMoodBlocks Demo 🟣
           </h1>
+          {listening && (
+            <div className="text-xs opacity-60">
+              Listening for voice commands...
+            </div>
+          )}
           <div className="text-xs opacity-60">Demo Mode (no blockchain)</div>
         </div>
 

@@ -5,6 +5,7 @@ export type VoiceEmojiMap = Record<string, string>;
 const DEFAULT_MAP: VoiceEmojiMap = {
   love: "❤️",
   happy: "❤️",
+  ivan: "❤️",
   cool: "😎",
   relaxed: "😎",
   sad: "😭",

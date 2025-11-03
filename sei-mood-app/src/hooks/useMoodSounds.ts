@@ -7,11 +7,13 @@ const soundFiles: Record<string, string> = {
 
 const audioCache: Record<string, HTMLAudioElement> = {};
 
+
 export function useMoodSounds() {
   function playSound(emoji: string) {
     if (!audioCache[emoji]) {
       audioCache[emoji] = new Audio(soundFiles[emoji]);
     }
+
     const sound = audioCache[emoji];
     sound.currentTime = 0;
     sound.play().catch(() => {});
